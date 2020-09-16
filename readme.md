@@ -19,3 +19,10 @@ docker run -p 9000:9000 \
 - [ ] 数据的hash check
 - [ ] 是否要分片上传，支持并行下载，这样恢复数据的时候更快
 - [ ] 使用一个 meta file 来存储index以及hash等；
+
+## Reloadmap
+
+- [ ] watchdog for file events;
+- [ ] upload to s3 based on [multipart upload](https://aws.amazon.com/cn/blogs/aws/amazon-s3-multipart-upload/);
+  - check shasum for total file.
+- [ ] delete file with truncate. (why?)
