@@ -40,6 +40,8 @@ def main(access_key, secret_key, domain, path, bucket, ssl):
         print("File name check failed!")
         return
 
+    print(f"start verifying file's md5, file count: {len(objects)}.")
+    success_count = fail_count = 0
     for obj in objects:
         print(f"verifying {obj.object_name}...", end="", flush=True)
         if "-" in obj.etag:
@@ -55,8 +57,11 @@ def main(access_key, secret_key, domain, path, bucket, ssl):
 
         if file_hash == object_hash:
             print("pass")
+            success_count += 1
         else:
             print("fail!")
+            fail_count += 1
+    print(f"verify finished, passed: {success_count}, failed: {fail_count}.")
 
 if __name__ == "__main__":
     main()
