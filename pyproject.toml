@@ -12,7 +12,8 @@ click = "^7.1.2"
 psutil = "^5.7.2"
 
 [tool.poetry.scripts]
-mysql2s3 = 'mysql2s3:main'
+mysql2s3 = 'mysql2s3.mysql2s3:main'
+verify-dump = 'mysql2s3.verify_dump:main'
 
 [tool.poetry.dev-dependencies]
 
