@@ -2,10 +2,12 @@
 watchdog -----------> mydumper_watcher ----------> uploading -------> done
 dumping_files         delete from dumping_files       if all done
 """
+import os
 import sys
 import time
 import logging
 from threading import Thread
+from concurrent.futures import ThreadPoolExecutor
 
 import psutil
 import click
@@ -21,19 +23,12 @@ logger = logging.getLogger(__name__)
 dumping_files = []
 
 
-minioClient = Minio(
-    "your_hostname.sampledomain.com:9000",
-    access_key="ACCESS_KEY",
-    secret_key="SECRET_KEY",
-    secure=True,
-)
-
-
 class FileCreateEventHandler(FileSystemEventHandler):
     events = 0
 
     def on_created(self, event):
         logger.info(f"new file created: {event.src_path} wait to close...")
+        dumping_files.append(event.src_path)
 
 
 def _find_mydumper_pid():
@@ -47,38 +42,69 @@ def _find_mydumper_pid():
             logger.warn(f"error when finding mydumper proc... {e}")
 
 
-def mydumper_watcher(interval: int, mydumper_proc, observer):
+def watch_mydumper(interval: int, mydumper_proc, uploader):
     """
     Check if current ``dumping_files`` is closed for every ``interval`` seconds.
     :returns : if closed, then it is ready to upload, yields the file path.
     """
-
-    # mydumper
-    # proc=psutil.Process(pid=84959, name='mydumper', status='running', started='13:40:38') opened popenfile(path='/Users/laixintao/Downloads/target/metadata.partial', fd=5)
-
-    # find mydumper pid
-
-    def check_if_file_is_closed():
-        while psutil.pid_exists(mydumper_proc.pid):
-            logger.info("----")
+    while psutil.pid_exists(mydumper_proc.pid):
+        logger.info("start to check mydumper opened files...")
+        mydumper_opened_files = []
+        try:
             for item in mydumper_proc.open_files():
-                try:
-                    print(f"mydumper opened {item}...")
+                mydumper_opened_files.append(item.path)
+        except psutil.AccessDenied as e:
+            pass
+        except Exception as e:
+            logger.warn(e)
 
-                except psutil.AccessDenied as e:
-                    pass
-                except Exception as e:
-                    logger.warn(e)
-            time.sleep(interval)
-        logger.info(f"Mydumper(pid={mydumper_proc.pid}) exit.")
-        # TODO upload left files on dumping_files
-        observer.stop()
+        closed_files = [f for f in dumping_files if f not in mydumper_opened_files]
+        if closed_files:
+            logger.info(f"mydumper still open {', '.join(mydumper_opened_files)}")
+            logger.info(
+                f"mydumper no longer open {', '.join(closed_files)}, start to upload them to S3..."
+            )
+            for f in closed_files:
+                uploader.upload(f)
+                dumping_files.remove(f)
 
-    return Thread(target=check_if_file_is_closed, name="mydumper_watcher")
+        time.sleep(interval)
+
+    logger.info(f"Mydumper(pid={mydumper_proc.pid}) exit.")
+
+    # upload left files on dumping_files
+    for f in dumping_files:
+        uploader.upload(f)
 
 
-def upload():
-    pass
+class S3Uploader:
+    def __init__(self, access_key, secret_key, domain, bucket, ssl, upload_thread):
+        self.minio_client = Minio(
+            domain, access_key=access_key, secret_key=secret_key, secure=ssl,
+        )
+        self.bucket = bucket
+        self.executor = ThreadPoolExecutor(max_workers=upload_thread)
+        # TODO ensure bucket exists
+        # TODO delete file after upload(add flag!)
+
+    def upload(self, file_path):
+        def _upload():
+            try:
+                logger.info(f"start upload {file_path}...")
+                self.minio_client.fput_object(
+                    self.bucket, os.path.basename(file_path), file_path
+                )
+                logger.info(f"upload {file_path} done!")
+            except Exception as e:
+                logger.exception(e)
+
+        self.executor.submit(_upload)
+
+    def shutdown(self):
+        """
+        wait all uploading jobs to finish, then exit.
+        """
+        self.executor.shutdown(wait=True)
 
 
 @click.command()
@@ -90,10 +116,18 @@ def upload():
 )
 @click.option("--path", default=".")
 @click.option("--check-interval", default=1)  # seconds
-def main(access_key, secret_key, domain, bucket, path, check_interval):
+@click.option("--ssl/--no-ssl", default=False)
+@click.option("--upload-thread", default=4)
+def main(
+    access_key, secret_key, domain, bucket, path, check_interval, ssl, upload_thread
+):
     logger.info(f"upload {path} to {domain}/{bucket}, start to watch...")
 
     event_handler = FileCreateEventHandler()
+    # add current exist files to watching list.
+    dumping_files.extend([f"{os.path.abspath(path)}/{p}" for p in os.listdir(path)])
+    logger.info(f"waiting mydumper to close {', '.join(dumping_files)}...")
+
     observer = Observer()
     observer.schedule(event_handler, path, recursive=True)
     observer.start()
@@ -103,11 +137,13 @@ def main(access_key, secret_key, domain, bucket, path, check_interval):
         logger.error("Mydumper is not running!")
         return
 
-    mydumper_watcher_thread = mydumper_watcher(check_interval, mydumper_proc, observer)
-    mydumper_watcher_thread.start()
+    uploader = S3Uploader(access_key, secret_key, domain, bucket, ssl, upload_thread)
 
-    mydumper_watcher_thread.join()
-    observer.join()
+    try:
+        watch_mydumper(check_interval, mydumper_proc, uploader)
+    finally:
+        observer.stop()
+        uploader.shutdown()
 
 
 if __name__ == "__main__":
