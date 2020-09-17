@@ -1,3 +1,7 @@
+"""
+watchdog -----------> mydumper_watcher ----------> uploading -------> done
+dumping_files         delete from dumping_files       if all done
+"""
 import sys
 import time
 import logging
@@ -43,7 +47,7 @@ def _find_mydumper_pid():
             logger.warn(f"error when finding mydumper proc... {e}")
 
 
-def file_closed_interval_check_thread(interval: int, mydumper_proc):
+def mydumper_watcher(interval: int, mydumper_proc, observer):
     """
     Check if current ``dumping_files`` is closed for every ``interval`` seconds.
     :returns : if closed, then it is ready to upload, yields the file path.
@@ -67,10 +71,10 @@ def file_closed_interval_check_thread(interval: int, mydumper_proc):
                     logger.warn(e)
             time.sleep(interval)
         logger.info(f"Mydumper(pid={mydumper_proc.pid}) exit.")
+        # TODO upload left files on dumping_files
+        observer.stop()
 
-    return Thread(
-        target=check_if_file_is_closed, name="file_closed_interval_check_thread"
-    )
+    return Thread(target=check_if_file_is_closed, name="mydumper_watcher")
 
 
 def upload():
@@ -98,12 +102,11 @@ def main(access_key, secret_key, domain, bucket, path, check_interval):
     if mydumper_proc is None:
         logger.error("Mydumper is not running!")
         return
-    file_closed_watcher = file_closed_interval_check_thread(
-        check_interval, mydumper_proc
-    )
-    file_closed_watcher.start()
 
-    file_closed_watcher.join()
+    mydumper_watcher_thread = mydumper_watcher(check_interval, mydumper_proc, observer)
+    mydumper_watcher_thread.start()
+
+    mydumper_watcher_thread.join()
     observer.join()
 
 
