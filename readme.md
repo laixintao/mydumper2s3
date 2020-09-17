@@ -26,3 +26,6 @@ docker run -p 9000:9000 \
 - [ ] upload to s3 based on [multipart upload](https://aws.amazon.com/cn/blogs/aws/amazon-s3-multipart-upload/);
   - check shasum for total file.
 - [ ] delete file with truncate. (why?)
+
+
+https://github.com/seb-m/pyinotify works only on Linux.
