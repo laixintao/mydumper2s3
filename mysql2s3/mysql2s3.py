@@ -1,6 +1,6 @@
 """
 watchdog -----------> mydumper_watcher ----------> uploading -------> done
-dumping_files         delete from dumping_files       if all done
+dumping_files       delete from dumping_files     if all done
 """
 import os
 import sys
@@ -21,6 +21,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 dumping_files = []
+uploading_files = []
 
 
 class FileCreateEventHandler(FileSystemEventHandler):
@@ -48,7 +49,7 @@ def watch_mydumper(interval: int, mydumper_proc, uploader):
     :returns : if closed, then it is ready to upload, yields the file path.
     """
     while psutil.pid_exists(mydumper_proc.pid):
-        logger.info("start to check mydumper opened files...")
+        logger.info(f"dump file check... (mydumper opened file: {len(dumping_files)}, uploading: {len(uploading_files)}).")
         mydumper_opened_files = []
         try:
             for item in mydumper_proc.open_files():
@@ -72,9 +73,6 @@ def watch_mydumper(interval: int, mydumper_proc, uploader):
 
     logger.info(f"Mydumper(pid={mydumper_proc.pid}) exit.")
 
-    # upload left files on dumping_files
-    for f in dumping_files:
-        uploader.upload(f)
 
 
 class S3Uploader:
@@ -83,17 +81,28 @@ class S3Uploader:
             domain, access_key=access_key, secret_key=secret_key, secure=ssl,
         )
         self.bucket = bucket
+        self._ensure_bucket(bucket)
         self.executor = ThreadPoolExecutor(max_workers=upload_thread)
-        # TODO ensure bucket exists
+
         # TODO delete file after upload(add flag!)
+
+    def _ensure_bucket(self, bucket):
+        found = self.minio_client.bucket_exists(bucket)
+        if found:
+            logger.info(f"bucket {bucket} already exist.")
+        else:
+            self.minio_client.make_bucket(bucket)
+            logger.info(f"bucket {bucket} not exist... created one.")
 
     def upload(self, file_path):
         def _upload():
             try:
                 logger.info(f"start upload {file_path}...")
+                uploading_files.append(file_path)
                 self.minio_client.fput_object(
                     self.bucket, os.path.basename(file_path), file_path
                 )
+                uploading_files.remove(file_path)
                 logger.info(f"upload {file_path} done!")
             except Exception as e:
                 logger.exception(e)
@@ -142,8 +151,12 @@ def main(
     try:
         watch_mydumper(check_interval, mydumper_proc, uploader)
     finally:
+        time.sleep(1)  # give observer 1 more seconds to handle events.
         observer.stop()
-        uploader.shutdown()
+    # upload left files on dumping_files
+    for f in dumping_files:
+        uploader.upload(f)
+    uploader.shutdown()
 
 
 if __name__ == "__main__":
