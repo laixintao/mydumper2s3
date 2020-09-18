@@ -2,6 +2,26 @@
 
 一个 MySQL 备份上传的工具。
 
+## Install
+
+```
+   pip install mysql2s3
+```
+
+## Usage
+
+```
+   mysql2s3 --help
+```
+
+Verify backup:
+
+```
+   verify-dump --help
+```
+
+# Development
+
 ## Run monio locally
 
 ```
