@@ -131,7 +131,11 @@ def scan_uploadable_files(path, mydumper_proc):
 
     if not mydumper_proc:
         # upload all
-        return [f for f in list_files if f not in uploaded_files]
+        return [
+            f
+            for f in list_files
+            if f not in uploaded_files and f not in uploading_files
+        ]
 
     mydumper_opened_files = []
     try:
@@ -147,7 +151,9 @@ def scan_uploadable_files(path, mydumper_proc):
     return [
         f
         for f in list_files
-        if f not in uploaded_files and f not in mydumper_opened_files
+        if f not in uploaded_files
+        and f not in mydumper_opened_files
+        and f not in uploading_files
     ]
 
 
@@ -200,11 +206,9 @@ def main(
     watch_mydumper(check_interval, mydumper_proc, uploader, path)
 
     # upload left files on dumping_files
-    final_upload_files = dumping_files
-    dumping_files = []
-    for f in final_upload_files:
+    for f in scan_uploadable_files(path, mydumper_proc):
         uploader.upload(f)
-    uploader.shutdown()
+        uploader.shutdown()
 
 
 if __name__ == "__main__":
