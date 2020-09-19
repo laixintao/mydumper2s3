@@ -5,13 +5,13 @@
 ## Install
 
 ```
-   pip install mysql2s3
+   pip install mydumper2s3
 ```
 
 ## Usage
 
 ```
-   mysql2s3 --help
+   mydumper2s3 --help
 ```
 
 Verify backup:

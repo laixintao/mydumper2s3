@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "mysql2s3"
+name = "mydumper2s3"
 version = "0.1.0"
 description = "Upload Mydumper directories to S3."
 authors = ["laixintao <laixintaoo@gmail.com>"]
@@ -12,8 +12,8 @@ click = "^7.1.2"
 psutil = "^5.7.2"
 
 [tool.poetry.scripts]
-mysql2s3 = 'mysql2s3.mysql2s3:main'
-verify-dump = 'mysql2s3.verify_dump:main'
+mydumper2s3 = 'mydumper2s3.mydumper2s3:main'
+verify-dump = 'mydumper2s3.verify_dump:main'
 
 [tool.poetry.dev-dependencies]
 
