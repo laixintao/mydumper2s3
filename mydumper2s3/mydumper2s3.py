@@ -188,6 +188,10 @@ def refresh_stats():
 def main(
     access_key, secret_key, domain, bucket, path, check_interval, ssl, upload_thread
 ):
+    """
+    mydumper2s3: upload mydumper dumped files to s3 bucket.
+    It works even while mydumper is running!
+    """
     global dumping_files, uploading_files, list_files
     logger.info(f"upload {path} to {domain}/{bucket}...")
 
