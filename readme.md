@@ -4,6 +4,8 @@
 
 A tool that can upload mydumper dumped files to S3 bucket.
 
+![](./docs/mydumper2s3.gif)
+
 It works even while mydumper is running, for mydumper opened files, mydumper2s3
 will wait mydumper to close those files then upload. `--delete-after-upload`
 option enables you to backup your MySQL without dumping all of your data to
