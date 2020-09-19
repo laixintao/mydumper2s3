@@ -170,16 +170,21 @@ def refresh_stats():
 
 
 @click.command()
-@click.option("--access_key")
-@click.option("--secret_key")
-@click.option("--domain")
+@click.option("-a", "--access_key", prompt=True, help="S3 access_key")
+@click.option("-s", "--secret_key", prompt=True, help="S3 secret_key")
+@click.option("-d", "--domain", help="S3 domain", prompt=True)
 @click.option(
-    "--bucket", help="is not spcified, a new bucket named by directory will be created"
+    "-b",
+    "--bucket",
+    help="S3 bucket, if not spcified, a new bucket named by directory will be created",
+    prompt=True,
 )
-@click.option("--path", default=".")
-@click.option("--check-interval", default=1)  # seconds
+@click.option("-l", "--path", default=".")
+@click.option("-i", "--check-interval", default=1)  # seconds
 @click.option("--ssl/--no-ssl", default=False)
-@click.option("--upload-thread", default=4)
+@click.option(
+    "-t", "--upload-thread", default=4, help="thread numbers used to upload to s3"
+)
 def main(
     access_key, secret_key, domain, bucket, path, check_interval, ssl, upload_thread
 ):
@@ -203,14 +208,15 @@ def main(
         for f in list_files:
             uploader.upload(f)
             refresh_stats()
-        return
 
-    watch_mydumper(check_interval, mydumper_proc, uploader, path)
+    else:
+        watch_mydumper(check_interval, mydumper_proc, uploader, path)
 
-    # upload left files on dumping_files
-    for f in scan_uploadable_files(path, mydumper_proc):
-        uploader.upload(f)
-        uploader.shutdown()
+        # upload left files on dumping_files
+        for f in scan_uploadable_files(path, mydumper_proc):
+            uploader.upload(f)
+            uploader.shutdown()
+    print(f"{len(uploaded_files)} files successfully uploaded.")
 
 
 if __name__ == "__main__":

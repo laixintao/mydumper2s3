@@ -43,9 +43,15 @@ def main(access_key, secret_key, domain, path, bucket, ssl):
     print(f"start verifying file's md5, file count: {len(objects)}.")
     success_count = fail_count = 0
     for obj in objects:
-        print(f"verifying {obj.object_name}...", end="", flush=True)
+        print(
+            f"({success_count+fail_count+1}/{len(objects)}) verifying {obj.object_name}...",
+            end="",
+            flush=True,
+        )
         if "-" in obj.etag:
-            print(" file uploaded by multipart, downloading file...", end="", flush=True)
+            print(
+                " file uploaded by multipart, downloading file...", end="", flush=True
+            )
             content = minio_client.get_object(bucket, obj.object_name).read()
             object_hash = hashlib.md5(content).hexdigest()
             print(" done...", end="", flush=True)
@@ -62,6 +68,7 @@ def main(access_key, secret_key, domain, path, bucket, ssl):
             print("fail!")
             fail_count += 1
     print(f"verify finished, passed: {success_count}, failed: {fail_count}.")
+
 
 if __name__ == "__main__":
     main()
