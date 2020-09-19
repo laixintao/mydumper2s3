@@ -183,16 +183,16 @@ def refresh_stats():
 def main(
     access_key, secret_key, domain, bucket, path, check_interval, ssl, upload_thread
 ):
-    global dumping_files, uploading_files
+    global dumping_files, uploading_files, list_files
     logger.info(f"upload {path} to {domain}/{bucket}...")
 
     # add current exist files to watching list.
-    uploading_files.extend([f"{os.path.abspath(path)}/{p}" for p in os.listdir(path)])
+    list_files = [f"{os.path.abspath(path)}/{p}" for p in os.listdir(path)]
 
     # if mydumper_proc doesn't exist, download all files then exit.
     # otherwiase, watching for every ``interval`` seconds.
     mydumper_proc = _find_mydumper_pid()
-    if mydumper_proc is None and not dumping_files:
+    if mydumper_proc is None and not list_files:
         logger.error("there is nothing to upload.")
         return
 
@@ -200,7 +200,9 @@ def main(
     if mydumper_proc is None:
         logger.error("Mydumper is not running!")
         logger.info("start uploading exist files...")
-        upload_exist_files(uploader, uploading_files)
+        for f in list_files:
+            uploader.upload(f)
+            refresh_stats()
         return
 
     watch_mydumper(check_interval, mydumper_proc, uploader, path)
