@@ -11,6 +11,7 @@ import os
 import sys
 import time
 import logging
+import urllib3
 from threading import Thread, Lock
 from concurrent.futures import ThreadPoolExecutor
 
@@ -27,13 +28,15 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 DELETE_AFTER_UPLOAD = False
+
 refresh_stat_lock = Lock()
 # files in target directory
 list_files = []
 # files opened by mydumper
 dumping_files = []
 # files are loading to s3
-uploading_files = []
+uploading_files = set()
+uploading_files_lock = Lock()
 # files finished uploading
 uploaded_files = []
 
@@ -73,6 +76,7 @@ class S3Uploader:
             access_key=access_key,
             secret_key=secret_key,
             secure=ssl,
+            http_client=urllib3.poolmanager.PoolManager(maxsize=upload_thread),
         )
         self.domain = domain
         self.access_key = access_key
@@ -81,7 +85,6 @@ class S3Uploader:
         self.bucket = bucket
         self._ensure_bucket(bucket)
         self.executor = ThreadPoolExecutor(max_workers=upload_thread)
-
         # TODO delete file after upload(add flag!)
 
     def _ensure_bucket(self, bucket):
@@ -93,23 +96,25 @@ class S3Uploader:
             logger.info(f"bucket {bucket} not exist... created one.")
 
     def upload(self, file_path):
+        with uploading_files_lock:
+            uploading_files.add(file_path)
+
         def _upload():
             try:
+                start_time = time.time()
                 logger.info(f"start upload {file_path}...")
-                uploading_files.append(file_path)
                 refresh_stats()
-                client = Minio(
-                    self.domain,
-                    access_key=self.access_key,
-                    secret_key=self.secret_key,
-                    secure=self.secure,
+                self.minio_client.fput_object(
+                    self.bucket, os.path.basename(file_path), file_path
                 )
-
-                client.fput_object(self.bucket, os.path.basename(file_path), file_path)
-                uploading_files.remove(file_path)
+                with uploading_files_lock:
+                    uploading_files.remove(file_path)
                 uploaded_files.append(file_path)
                 refresh_stats()
-                logger.info(f"upload {file_path} done!")
+                end_time = time.time()
+                logger.info(
+                    f"upload {file_path} done! cost: {end_time-start_time} seconds."
+                )
             except Exception as e:
                 logger.exception(e)
 
@@ -148,13 +153,15 @@ def scan_uploadable_files(path, mydumper_proc):
 
     dumping_files = mydumper_opened_files
     refresh_stats()
-    return [
+    ready_to_upload = [
         f
         for f in list_files
         if f not in uploaded_files
         and f not in mydumper_opened_files
         and f not in uploading_files
     ]
+    logger.info(f"=ready to upload files: {ready_to_upload}")
+    return ready_to_upload
 
 
 def refresh_stats():
@@ -202,13 +209,12 @@ def main(
     # otherwiase, watching for every ``interval`` seconds.
     mydumper_proc = _find_mydumper_pid()
     if mydumper_proc is None and not list_files:
-        logger.error("there is nothing to upload.")
+        print("there is nothing to upload.")
         return
 
     uploader = S3Uploader(access_key, secret_key, domain, bucket, ssl, upload_thread)
     if mydumper_proc is None:
-        logger.error("Mydumper is not running!")
-        logger.info("start uploading exist files...")
+        print("mydumper is not running, I just upload exist files then exist...")
         for f in list_files:
             uploader.upload(f)
             refresh_stats()
@@ -219,8 +225,8 @@ def main(
         # upload left files on dumping_files
         for f in scan_uploadable_files(path, mydumper_proc):
             uploader.upload(f)
-            uploader.shutdown()
-    print(f"{len(uploaded_files)} files successfully uploaded.")
+    uploader.shutdown()
+    print(f"\n{len(uploaded_files)} files successfully uploaded.")
 
 
 if __name__ == "__main__":
