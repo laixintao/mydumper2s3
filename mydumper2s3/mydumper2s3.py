@@ -12,7 +12,7 @@ import sys
 import time
 import logging
 import urllib3
-from threading import Thread, Lock
+from threading import Lock
 from concurrent.futures import ThreadPoolExecutor
 
 import psutil
@@ -146,7 +146,7 @@ def scan_uploadable_files(path, mydumper_proc):
     try:
         for item in mydumper_proc.open_files():
             mydumper_opened_files.append(item.path)
-    except psutil.AccessDenied as e:
+    except psutil.AccessDenied:
         pass
     except Exception as e:
         logger.warn(e)
@@ -168,7 +168,12 @@ def refresh_stats():
     global list_files, dumping_files, uploaded_files, uploaded_files
     global DELETE_AFTER_UPLOAD
     with refresh_stat_lock:
-        text = f"\r{len(list_files):>4} files in directory,{len(dumping_files):>4} dumping,{len(uploading_files):>4} uploading, {len(uploaded_files):>4} uploaded"
+        text = (
+            f"\r{len(list_files):>4} files in directory,"
+            f"{len(dumping_files):>4} dumping,"
+            f"{len(uploading_files):>4} uploading,"
+            f"{len(uploaded_files):>4} uploaded"
+        )
         if DELETE_AFTER_UPLOAD:
             text += "(deleted)."
         else:

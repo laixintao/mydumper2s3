@@ -4,7 +4,6 @@ then delete the bucket.
 """
 import os
 import click
-import hashlib
 from minio import Minio
 
 
