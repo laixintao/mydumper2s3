@@ -105,11 +105,3 @@ docker run -p 9000:9000 \
   -e "MINIO_SECRET_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY" \
   minio/minio server /data
 ```
-
-## Reloadmap
-
-- [ ] watchdog for file events;
-- [ ] upload to s3 based on
-      [multipart upload](https://aws.amazon.com/cn/blogs/aws/amazon-s3-multipart-upload/);
-  - check shasum for total file.
-- [ ] delete file with truncate. (why?)
