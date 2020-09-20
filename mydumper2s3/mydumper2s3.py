@@ -62,7 +62,7 @@ def watch_mydumper(interval: int, mydumper_proc, uploader, path):
             f"dump file check... (mydumper opened file: {len(dumping_files)}, uploading: {len(uploading_files)})."
         )
         for f in scan_uploadable_files(path, mydumper_proc):
-            uploader.upload(f)
+            uploader.upload(path, f)
 
         time.sleep(interval)
 
@@ -85,7 +85,6 @@ class S3Uploader:
         self.bucket = bucket
         self._ensure_bucket(bucket)
         self.executor = ThreadPoolExecutor(max_workers=upload_thread)
-        # TODO delete file after upload(add flag!)
 
     def _ensure_bucket(self, bucket):
         found = self.minio_client.bucket_exists(bucket)
@@ -95,7 +94,7 @@ class S3Uploader:
             self.minio_client.make_bucket(bucket)
             logger.info(f"bucket {bucket} not exist... created one.")
 
-    def upload(self, file_path):
+    def upload(self, dir_path, file_path):
         with uploading_files_lock:
             uploading_files.add(file_path)
 
@@ -104,9 +103,13 @@ class S3Uploader:
                 start_time = time.time()
                 logger.info(f"start upload {file_path}...")
                 refresh_stats()
-                self.minio_client.fput_object(
-                    self.bucket, os.path.basename(file_path), file_path
+                client = Minio(
+                    self.domain,
+                    access_key=self.access_key,
+                    secret_key=self.secret_key,
+                    secure=self.secure,
                 )
+                client.fput_object(self.bucket, os.path.basename(file_path), file_path)
                 with uploading_files_lock:
                     uploading_files.remove(file_path)
                 uploaded_files.append(file_path)
@@ -115,6 +118,10 @@ class S3Uploader:
                 logger.info(
                     f"upload {file_path} done! cost: {end_time-start_time} seconds."
                 )
+                if DELETE_AFTER_UPLOAD:
+                    os.remove(file_path)
+                    # only update display count
+                    scan_uploadable_files(dir_path, None)
             except Exception as e:
                 logger.exception(e)
 
@@ -133,34 +140,33 @@ def scan_uploadable_files(path, mydumper_proc):
     """
     global list_files, dumping_files
     list_files = [f"{os.path.abspath(path)}/{p}" for p in os.listdir(path)]
+    non_uploaded_files = [
+        f for f in list_files if f not in uploaded_files and f not in uploading_files
+    ]
 
     if not mydumper_proc:
         # upload all
-        return [
-            f
-            for f in list_files
-            if f not in uploaded_files and f not in uploading_files
-        ]
-
+        dumping_files = []
+        refresh_stats()
+        return non_uploaded_files
     mydumper_opened_files = []
     try:
         for item in mydumper_proc.open_files():
             mydumper_opened_files.append(item.path)
     except psutil.AccessDenied:
         pass
+    except psutil.NoSuchProcess:
+        dumping_files = []
+        refresh_stats()
+        logger.warn("mydumper exit while scan files... return left files..")
+        return non_uploaded_files
+
     except Exception as e:
-        logger.warn(e)
+        logger.exception(e)
 
     dumping_files = mydumper_opened_files
     refresh_stats()
-    ready_to_upload = [
-        f
-        for f in list_files
-        if f not in uploaded_files
-        and f not in mydumper_opened_files
-        and f not in uploading_files
-    ]
-    logger.info(f"=ready to upload files: {ready_to_upload}")
+    ready_to_upload = [f for f in non_uploaded_files if f not in mydumper_opened_files]
     return ready_to_upload
 
 
@@ -197,14 +203,29 @@ def refresh_stats():
 @click.option(
     "-t", "--upload-thread", default=4, help="thread numbers used to upload to s3"
 )
+@click.option(
+    "--delete-after-upload/--no-delete-after-upload",
+    default=False,
+    help="if set to True, files will be deleted in local space after uploading.",
+)
 def main(
-    access_key, secret_key, domain, bucket, path, check_interval, ssl, upload_thread
+    access_key,
+    secret_key,
+    domain,
+    bucket,
+    path,
+    check_interval,
+    ssl,
+    upload_thread,
+    delete_after_upload,
 ):
     """
     mydumper2s3: upload mydumper dumped files to s3 bucket.
     It works even while mydumper is running!
     """
-    global dumping_files, uploading_files, list_files
+    global dumping_files, uploading_files, list_files, DELETE_AFTER_UPLOAD
+    DELETE_AFTER_UPLOAD = delete_after_upload
+
     logger.info(f"upload {path} to {domain}/{bucket}...")
 
     # add current exist files to watching list.
@@ -221,7 +242,7 @@ def main(
     if mydumper_proc is None:
         print("mydumper is not running, I just upload exist files then exist...")
         for f in list_files:
-            uploader.upload(f)
+            uploader.upload(path, f)
             refresh_stats()
 
     else:
@@ -229,7 +250,7 @@ def main(
 
         # upload left files on dumping_files
         for f in scan_uploadable_files(path, mydumper_proc):
-            uploader.upload(f)
+            uploader.upload(path, f)
     uploader.shutdown()
     print(f"\n{len(uploaded_files)} files successfully uploaded.")
 
