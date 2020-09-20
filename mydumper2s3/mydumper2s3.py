@@ -144,10 +144,10 @@ def scan_uploadable_files(path, mydumper_proc):
         f for f in list_files if f not in uploaded_files and f not in uploading_files
     ]
 
-    logger.info(f"list_files: {list_files}, uploading_files: {uploading_files}")
     if not mydumper_proc:
         # upload all
         dumping_files = []
+        refresh_stats()
         return non_uploaded_files
     mydumper_opened_files = []
     try:
@@ -157,6 +157,7 @@ def scan_uploadable_files(path, mydumper_proc):
         pass
     except psutil.NoSuchProcess:
         dumping_files = []
+        refresh_stats()
         logger.warn("mydumper exit while scan files... return left files..")
         return non_uploaded_files
 
