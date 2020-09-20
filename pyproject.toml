@@ -3,6 +3,8 @@ name = "mydumper2s3"
 version = "0.1.5"
 description = "Upload Mydumper directories to S3."
 authors = ["laixintao <laixintaoo@gmail.com>"]
+readme = 'readme.md'
+keywords = ['mydumper', 'mysql', 'backup']
 
 [tool.poetry.dependencies]
 python = "^3.7"
