@@ -41,23 +41,27 @@ Check help:
 
 ```
 $ mydumper2s3 --help
-Usage: mydumper2s3 [OPTIONS]
+Usage: mydumper2s3.py [OPTIONS]
 
   mydumper2s3: upload mydumper dumped files to s3 bucket. It works even
   while mydumper is running!
 
 Options:
-  -a, --access_key TEXT         S3 access_key
-  -s, --secret_key TEXT         S3 secret_key
-  -d, --domain TEXT             S3 domain
-  -b, --bucket TEXT             S3 bucket, if not spcified, a new bucket
-                                named by directory will be created
+  -a, --access_key TEXT           S3 access_key
+  -s, --secret_key TEXT           S3 secret_key
+  -d, --domain TEXT               S3 domain
+  -b, --bucket TEXT               S3 bucket, if not spcified, a new bucket
+                                  named by directory will be created
 
   -l, --path TEXT
   -i, --check-interval INTEGER
   --ssl / --no-ssl
-  -t, --upload-thread INTEGER   thread numbers used to upload to s3
-  --help                        Show this message and exit.
+  -t, --upload-thread INTEGER     thread numbers used to upload to s3
+  --delete-after-upload / --no-delete-after-upload
+                                  if set to True, files will be deleted in
+                                  local space after uploading.
+
+  --help                          Show this message and exit.
 ```
 
 ### Example
