@@ -1,7 +1,5 @@
 # Mydumper To S3
 
-![Action](https://github.com/laixintao/mydumper2s3/workflows/Test/badge.svg)
-
 A tool that can upload mydumper dumped files to S3 bucket.
 
 ![](./docs/mydumper2s3.gif)
